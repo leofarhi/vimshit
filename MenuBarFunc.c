@@ -163,7 +163,7 @@ void on_closeFile_clicked(GtkWidget *widget, gpointer data){
 }
 
 void on_quit_clicked(GtkWidget *widget, gpointer data){
-    gtk_main_quit();
+    on_window_destroy(window, NULL);
 }
 
 /*void on_undo_clicked(GtkWidget *widget, gpointer data){

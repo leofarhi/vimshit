@@ -11,15 +11,27 @@ GtkWidget *notebook = NULL;
 list *tabList = NULL;
 
 void on_window_destroy(GtkWidget *widget, gpointer data) {
-  list_free(tabList);
-  gtk_main_quit();
+  GtkWidget *dialog;
+  gint response;
+
+  dialog = gtk_message_dialog_new(GTK_WINDOW(widget),
+                                  GTK_DIALOG_MODAL,
+                                  GTK_MESSAGE_QUESTION,
+                                  GTK_BUTTONS_YES_NO,
+                                  "Voulez-vous vraiment quitter ?");
+  response = gtk_dialog_run(GTK_DIALOG(dialog));
+  if (response == GTK_RESPONSE_YES) {
+        list_free(tabList);
+        gtk_main_quit();
+  }
+  gtk_widget_destroy(dialog);
 }
 
 void create_main_ui() {
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "VIMSHIT");
     gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
-    g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
+    g_signal_connect(window, "delete-event", G_CALLBACK(on_window_destroy), NULL);
     tabList = list_new();
 
     GtkSettings *settings = gtk_settings_get_default();
