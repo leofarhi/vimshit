@@ -65,22 +65,9 @@ void on_openFile_clicked(GtkWidget *widget, gpointer data){
         //printf("File selected: %s\n", AbsPath);
         //printf("File selected: %s\n", g_get_current_dir());
         //printf("File selected: %s\n", g_get_home_dir());
-        TabStruct * tab = createTabStruct(AbsPath, filename);
-        FILE *fp = fopen(AbsPath, "r");
-        if(fp == NULL){
-            printf("Error opening file\n");
-            return;
-        }
-        char *line = NULL;
-        size_t len = 0;
-        ssize_t read;
-        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
-        while ((read = getline(&line, &len, fp)) != -1) {
-            gtk_text_buffer_insert_at_cursor(buffer, line, -1);
-        }
-        fclose(fp);
-        if (line)
-            free(line);
+        open_file(NULL,AbsPath, filename);
+        //focus on the new tab
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), -1);
     }
     gtk_widget_destroy(dialog);
 }
@@ -88,18 +75,7 @@ void on_openFile_clicked(GtkWidget *widget, gpointer data){
 void on_saveFile_clicked(GtkWidget *widget, gpointer data){
     TabStruct * tab = GetCurTabStruct();
     if (tab == NULL) return;
-    FILE *fp = fopen(tab->path, "w");
-    if(fp == NULL){
-        printf("Error opening file\n");
-        return;
-    }
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
-    GtkTextIter start, end;
-    gtk_text_buffer_get_start_iter(buffer, &start);
-    gtk_text_buffer_get_end_iter(buffer, &end);
-    char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
-    fprintf(fp, "%s", text);
-    fclose(fp);
+    save_file(tab);
 }
 
 void on_saveAsFile_clicked(GtkWidget *widget, gpointer data){
@@ -141,18 +117,7 @@ void on_saveAsFile_clicked(GtkWidget *widget, gpointer data){
 void on_saveAllFile_clicked(GtkWidget *widget, gpointer data){
     for(list_node *node = tabList->head; node != NULL; node = node->next){
         TabStruct * tab = (TabStruct *)node->data;
-        FILE *fp = fopen(tab->path, "w");
-        if(fp == NULL){
-            printf("Error opening file\n");
-            return;
-        }
-        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
-        GtkTextIter start, end;
-        gtk_text_buffer_get_start_iter(buffer, &start);
-        gtk_text_buffer_get_end_iter(buffer, &end);
-        char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
-        fprintf(fp, "%s", text);
-        fclose(fp);
+        save_file(tab);
     }
 }
 
@@ -166,19 +131,17 @@ void on_quit_clicked(GtkWidget *widget, gpointer data){
     on_window_destroy(window, NULL);
 }
 
-/*void on_undo_clicked(GtkWidget *widget, gpointer data){
+void on_undo_clicked(GtkWidget *widget, gpointer data){
     TabStruct * tab = GetCurTabStruct();
     if (tab == NULL) return;
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
-    gtk_text_buffer_undo(buffer);
+    undo_text(tab);
 }
 
 void on_redo_clicked(GtkWidget *widget, gpointer data){
     TabStruct * tab = GetCurTabStruct();
     if (tab == NULL) return;
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
-    gtk_text_buffer_redo(buffer);
-}*/
+    redo_text(tab);
+}
 
 void on_cut_clicked(GtkWidget *widget, gpointer data){
     TabStruct * tab = GetCurTabStruct();
@@ -218,4 +181,25 @@ void on_selectAll_clicked(GtkWidget *widget, gpointer data){
     gtk_text_buffer_get_start_iter(buffer, &start);
     gtk_text_buffer_get_end_iter(buffer, &end);
     gtk_text_buffer_select_range(buffer, &start, &end);
+}
+
+void on_shortcuts_clicked(GtkWidget *widget, gpointer data){
+    GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE, "Shortcuts");
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+    "Ctrl + N: New File\n"
+    //"Ctrl + O: Open File\n"
+    "Ctrl + S: Save File\n"
+   // "Ctrl + Shift + S: Save All Files\n"
+    "Ctrl + W: Close File\n"
+    //"Ctrl + Q: Quit\n"
+    "Ctrl + Z: Undo\n"
+    "Ctrl + Y: Redo\n"
+    //"Ctrl + X: Cut\n"
+    "Ctrl + C: Copy\n"
+    "Ctrl + V: Paste\n"
+    //"Ctrl + D: Delete\n"
+    "Ctrl + A: Select All"
+    );
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
 }

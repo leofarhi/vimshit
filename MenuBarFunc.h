@@ -19,4 +19,5 @@ void on_copy_clicked(GtkWidget *widget, gpointer data);
 void on_paste_clicked(GtkWidget *widget, gpointer data);
 void on_delete_clicked(GtkWidget *widget, gpointer data);
 void on_selectAll_clicked(GtkWidget *widget, gpointer data);
+void on_shortcuts_clicked(GtkWidget *widget, gpointer data);
 #endif

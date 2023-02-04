@@ -1,11 +1,46 @@
 #include "MainUI.h"
 #include <gtk/gtk.h>
+#include <gdk/gdk.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "TabStruct.h"
 #include "MenuBarFunc.h"
 #include "list.h"
+
+#include "Colorations/languageC.h"
+
+char* GetExtension(char* filename)
+{
+    char *dot = strrchr(filename, '.');
+    if(!dot || dot == filename) return "";
+    return dot + 1;
+}
+
+void DefaultSetTagColor(TabStruct *tabStruct)
+{
+    
+}
+
+void DefaultColorize(TabStruct *tabStruct)
+{
+    
+}
+
+void SetColoration(TabStruct *tabStruct)
+{
+    char *extension = GetExtension(tabStruct->filename);
+    if (strcmp(extension, "c") == 0 || strcmp(extension, "h") == 0)
+    {
+        tabStruct->setTagColor = setTagColorC;
+        tabStruct->colorize = colorizeC;
+    }
+    else
+    {
+        tabStruct->setTagColor = DefaultSetTagColor;
+        tabStruct->colorize = DefaultColorize;
+    }
+}
 
 TabStruct *createTabStruct(char *path, char *filename)
 {
@@ -32,12 +67,22 @@ TabStruct *createTabStruct(char *path, char *filename)
     tabStruct->scrollbar = scrollbar;
     tabStruct->undo_stack = NULL;
     tabStruct->redo_stack = NULL;
+    tabStruct->HasChanged = 0;
+
+    //change size of letters in textview
+    PangoFontDescription *font_desc = pango_font_description_new();
+    pango_font_description_set_size(font_desc, 12 * PANGO_SCALE);
+    gtk_widget_override_font(textview, font_desc);
     
     list_add(tabList,tabStruct);
 
     //change tab name
     GtkWidget *label = gtk_label_new(filename);
     gtk_notebook_set_tab_label(GTK_NOTEBOOK(notebook), tab1, label);
+
+    addKeyBinding(tabStruct);
+    SetColoration(tabStruct);
+    tabStruct->setTagColor(tabStruct);
 
     gtk_widget_show_all(tab1);
     return tabStruct;
@@ -51,6 +96,53 @@ void freeTabStruct(TabStruct *tabStruct)
     list_remove(tabList,tabStruct);
     //free tabStruct
     free(tabStruct);
+}
+
+TabStruct * open_file(TabStruct *tab, char *AbsPath, char *filename)
+{
+    if (tab == NULL)
+        tab = createTabStruct(AbsPath, filename);
+    FILE *fp = fopen(AbsPath, "r");
+    if(fp == NULL){
+        printf("Error opening file\n");
+        return NULL;
+    }
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
+    while ((read = getline(&line, &len, fp)) != -1) {
+        gtk_text_buffer_insert_at_cursor(buffer, line, -1);
+    }
+    fclose(fp);
+    if (line)
+        free(line);
+    clear_undo_redo(tab);
+    save_state(tab);
+    tab->colorize(tab);
+    return tab;
+}
+
+void save_file(TabStruct *tab)
+{
+    FILE *fp = fopen(tab->path, "w");
+    if(fp == NULL){
+        printf("Error opening file\n");
+        return;
+    }
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tab->textview));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_start_iter(buffer, &start);
+    gtk_text_buffer_get_end_iter(buffer, &end);
+    char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    fprintf(fp, "%s", text);
+    fclose(fp);
+    tab->HasChanged = 0;
+    g_free(text);
+    //change tab name
+    GtkWidget *label = gtk_label_new(tab->filename);
+    gtk_notebook_set_tab_label(GTK_NOTEBOOK(notebook), tab->tab, label);
+    tab->colorize(tab);
 }
 
 
@@ -82,7 +174,9 @@ void undo_text(TabStruct* tabStruct)
 
     tabStruct->redo_stack = g_list_append(tabStruct->redo_stack, g_strdup(g_list_nth_data(tabStruct->undo_stack, g_list_length(tabStruct->undo_stack) - 1)));
     tabStruct->undo_stack = g_list_delete_link(tabStruct->undo_stack, g_list_last(tabStruct->undo_stack));
-    gtk_text_buffer_set_text(tabStruct->buffer, g_list_nth_data(tabStruct->undo_stack, g_list_length(tabStruct->undo_stack) - 1), -1);
+    char *text = g_list_nth_data(tabStruct->undo_stack, g_list_length(tabStruct->undo_stack) - 1);
+    if (text != NULL)
+        gtk_text_buffer_set_text(tabStruct->buffer, (const char*)text, -1);
 }
 
 void redo_text(TabStruct* tabStruct)
@@ -95,18 +189,229 @@ void redo_text(TabStruct* tabStruct)
     gtk_text_buffer_set_text(tabStruct->buffer, g_list_nth_data(tabStruct->undo_stack, g_list_length(tabStruct->undo_stack) - 1), -1);
 }
 
-/*gboolean key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
+void clear_undo_redo(TabStruct* tabStruct)
 {
-    if ((event->state & GDK_CONTROL_MASK) && event->keyval == 'z')
-    {
-        if (event->state & GDK_SHIFT_MASK)
-            redo_text();
-        else
-            undo_text();
+    g_list_free_full(tabStruct->undo_stack, g_free);
+    g_list_free_full(tabStruct->redo_stack, g_free);
+    tabStruct->undo_stack = NULL;
+    tabStruct->redo_stack = NULL;
+}
 
+//add tab function
+//if a part of the file is selected, and the user press tab, the selected part will be indented
+//if the user press tab and nothing is selected, the cursor will be indented
+void addTab(TabStruct *tabStruct)
+{
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tabStruct->textview));
+    GtkTextIter start, end;
+    if (gtk_text_buffer_get_selection_bounds(buffer, &start, &end))
+    {
+        //get start foreache line and indent (start selection is not always at the beginning of a line)
+        int NumbeOfLine = gtk_text_iter_get_line(&end) - gtk_text_iter_get_line(&start);
+        do
+        {
+            //get start of line
+            gtk_text_iter_set_line_offset(&start, 0);
+            //indent
+            gtk_text_buffer_insert(buffer, &start, "\t", 1);
+            //next line
+            gtk_text_iter_forward_line(&start);
+            NumbeOfLine--;
+        } while (NumbeOfLine >= 0);
+    }
+    else
+    {
+        gtk_text_buffer_insert_at_cursor(buffer, "\t", 1);
+    }
+}
+
+//if a part of the file is selected, and the user press {, the selected part will be indented and { will be added at the beginning of each line
+//and } will be added at the end of the selection
+//if the user press { and nothing is selected, the cursor add {
+void addBrace(TabStruct *tabStruct)
+{
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tabStruct->textview));
+    GtkTextIter start, end;
+    if (gtk_text_buffer_get_selection_bounds(buffer, &start, &end))
+    {
+        //get start foreache line and indent (start selection is not always at the beginning of a line)
+        int NumbeOfLine = gtk_text_iter_get_line(&end) - gtk_text_iter_get_line(&start);
+
+        //distance is a distance between the start of the selection and the start of the line
+        int distance = gtk_text_iter_get_line_offset(&start);
+        //add } at the end of the selection
+        gtk_text_buffer_insert(buffer, &start, "{", 1);
+        gtk_text_buffer_insert(buffer, &start, "\n", 1);
+        for (int i = 0; i < distance; i++)
+        {
+            gtk_text_buffer_insert(buffer, &start, "\t", 1);
+        }
+        do
+        {
+            //get start of line
+            gtk_text_iter_set_line_offset(&start, 0);
+            //indent
+            gtk_text_buffer_insert(buffer, &start, "\t", 1);
+            //next line
+            gtk_text_iter_forward_line(&start);
+            NumbeOfLine--;
+        } while (NumbeOfLine >= 0);
+        //add } at the end of the selection
+        gtk_text_buffer_insert(buffer, &start, "\n", 1);
+        for (int i = 0; i < distance; i++)
+        {
+            gtk_text_buffer_insert(buffer, &start, "\t", 1);
+        }
+        gtk_text_buffer_insert(buffer, &start, "}", 1);
+        gtk_text_buffer_insert(buffer, &start, "\n", 1);
+    }
+    else
+    {
+        gtk_text_buffer_insert_at_cursor(buffer, "{", 1);
+    }
+}
+
+//remove tab function
+//if the user press ctrl+tab, remove the tab at the start of the line where the cursor is
+void removeTab(TabStruct *tabStruct)
+{
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tabStruct->textview));
+    GtkTextIter start, end;
+    if (gtk_text_buffer_get_selection_bounds(buffer, &start, &end))
+    {
+        //get start foreache line and indent (start selection is not always at the beginning of a line)
+        int NumbeOfLine = gtk_text_iter_get_line(&end) - gtk_text_iter_get_line(&start);
+        do
+        {
+            //get start of line
+            gtk_text_iter_set_line_offset(&start, 0);
+            //check if the line start with a tab
+            if (gtk_text_iter_get_char(&start) == '\t')
+            {
+                //remove first char of the line
+                //set end at the start + 1
+                GtkTextIter next = start;
+                gtk_text_iter_forward_chars(&next, 1);
+                //remove the char
+                gtk_text_buffer_delete(buffer, &start, &next);
+            }
+            //next line
+            gtk_text_iter_forward_line(&start);
+            NumbeOfLine--;
+        } while (NumbeOfLine >= 0);
+    }
+    else
+    {
+        gtk_text_buffer_get_iter_at_mark(buffer, &start, gtk_text_buffer_get_insert(buffer));
+        gtk_text_iter_set_line_offset(&start, 0);
+        gtk_text_buffer_get_iter_at_mark(buffer, &end, gtk_text_buffer_get_insert(buffer));
+        gtk_text_iter_forward_chars(&end, 1);
+        if (gtk_text_iter_get_char(&start) == '\t')
+        {
+            gtk_text_buffer_delete(buffer, &start, &end);
+        }
+    }
+}
+
+//if the user press enter, the line will be indented
+void addNewLine(TabStruct *tabStruct)
+{
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tabStruct->textview));
+    GtkTextIter start, end;
+    if (gtk_text_buffer_get_selection_bounds(buffer, &start, &end)){
+        //remove the selection and add a new line
+        gtk_text_buffer_delete(buffer, &start, &end);
+        gtk_text_buffer_insert_at_cursor(buffer, "\n", 1);
+    }
+    else
+    {
+        //dist is the number of tab at the start of the line
+        int dist = 0;
+        gtk_text_buffer_get_iter_at_mark(buffer, &start, gtk_text_buffer_get_insert(buffer));
+        gtk_text_buffer_get_iter_at_mark(buffer, &end, gtk_text_buffer_get_insert(buffer));
+        gtk_text_iter_set_line_offset(&start, 0);
+        while (gtk_text_iter_get_char(&start) == '\t')
+        {
+            gtk_text_iter_forward_chars(&start, 1);
+            dist++;
+        }
+        gtk_text_buffer_insert_at_cursor(buffer, "\n", 1);
+        for (int i = 0; i < dist; i++)
+        {
+            gtk_text_buffer_insert_at_cursor(buffer, "\t", 1);
+        }
+    }
+}
+
+
+
+gboolean key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
+{
+    TabStruct *tabStruct = (TabStruct*)user_data;
+    //if key is only special key but not change the text return false
+    if (event->keyval == GDK_KEY_Control_L || event->keyval == GDK_KEY_Control_R || event->keyval == GDK_KEY_Shift_L || event->keyval == GDK_KEY_Shift_R || event->keyval == GDK_KEY_Alt_L || event->keyval == GDK_KEY_Alt_R)
+    {
+        return FALSE;
+    }
+    if (!tabStruct->HasChanged){
+        tabStruct->HasChanged = 1;
+        //change tab name
+        char *name = malloc(strlen(tabStruct->filename) + 2);
+        strcpy(name, tabStruct->filename);
+        strcat(name, "*");
+        GtkWidget *label = gtk_label_new(name);
+        gtk_notebook_set_tab_label(GTK_NOTEBOOK(notebook), tabStruct->tab, label);
+        free(name);
+    }
+    if (event->state & GDK_CONTROL_MASK)
+    {
+        switch (event->keyval)
+        {
+        case GDK_KEY_s:
+            save_file(tabStruct);
+            return TRUE;
+        case GDK_KEY_z:
+            undo_text(tabStruct);
+            return TRUE;
+        case GDK_KEY_y:
+            redo_text(tabStruct);
+            return TRUE;
+        case GDK_KEY_Tab:
+            removeTab(tabStruct);
+            return TRUE;
+        case GDK_KEY_w:
+            freeTabStruct(tabStruct);
+            return TRUE;
+        }
+    }
+    //printf("event->keyval = %d\n", event->keyval);
+    switch (event->keyval)
+    {
+    case GDK_KEY_Tab:
+        addTab(tabStruct);
+        return TRUE;
+    case GDK_KEY_braceleft:
+        addBrace(tabStruct);
+        return TRUE;
+    case GDK_KEY_braceright:
+        addBrace(tabStruct);
+        return TRUE;
+    case GDK_KEY_Return:
+        addNewLine(tabStruct);
         return TRUE;
     }
 
-    save_state();
+    tabStruct->colorize(tabStruct);
+
+    //////////////////////////
+    save_state(tabStruct);
     return FALSE;
-}*/
+
+}
+
+
+void addKeyBinding(TabStruct *tabStruct)
+{
+    tabStruct->buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tabStruct->textview));
+    g_signal_connect(tabStruct->textview, "key-press-event", G_CALLBACK(key_press_cb), tabStruct);
+}

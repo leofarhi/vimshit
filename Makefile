@@ -5,7 +5,8 @@ CFLAGS = `pkg-config --cflags gdk-x11-3.0 gdk-3.0 gtk+-3.0`# -g -fsanitize=addre
 LDLIBS = `pkg-config --libs gdk-x11-3.0 gdk-3.0 gtk+-3.0`
 EXE = bin/vimshit
 
-SRC = $(wildcard *.c)
+ListDir = Colorations
+SRC = $(wildcard *.c) $(foreach folder,$(ListDir),$(wildcard $(folder)/*.c))
 OBJ = ${SRC:.c=.o}
 DEP= ${SRC:.c=.d}
 PRG= ${SRC:.c=}

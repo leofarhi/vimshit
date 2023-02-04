@@ -107,12 +107,12 @@ void make_menu_bar(GtkWidget *vbox){
     GtkWidget *undo = gtk_menu_item_new_with_label("Undo");
     gtk_menu_shell_append(GTK_MENU_SHELL(editmenu), undo);
     gtk_widget_show(undo);
-    //g_signal_connect(undo, "activate", G_CALLBACK(on_undo_clicked), NULL);
+    g_signal_connect(undo, "activate", G_CALLBACK(on_undo_clicked), NULL);
 
     GtkWidget *redo = gtk_menu_item_new_with_label("Redo");
     gtk_menu_shell_append(GTK_MENU_SHELL(editmenu), redo);
     gtk_widget_show(redo);
-    //g_signal_connect(redo, "activate", G_CALLBACK(on_redo_clicked), NULL);
+    g_signal_connect(redo, "activate", G_CALLBACK(on_redo_clicked), NULL);
 
     GtkWidget *cut = gtk_menu_item_new_with_label("Cut");
     gtk_menu_shell_append(GTK_MENU_SHELL(editmenu), cut);
@@ -144,6 +144,11 @@ void make_menu_bar(GtkWidget *vbox){
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(help), helpmenu);
     gtk_menu_shell_append(GTK_MENU_SHELL(menubar), help);
     gtk_widget_show(help);
+
+    GtkWidget *shortcuts = gtk_menu_item_new_with_label("Shortcuts");
+    gtk_menu_shell_append(GTK_MENU_SHELL(helpmenu), shortcuts);
+    gtk_widget_show(shortcuts);
+    g_signal_connect(shortcuts, "activate", G_CALLBACK(on_shortcuts_clicked), NULL);
 
     GtkWidget *about = gtk_menu_item_new_with_label("About");
     gtk_menu_shell_append(GTK_MENU_SHELL(helpmenu), about);
