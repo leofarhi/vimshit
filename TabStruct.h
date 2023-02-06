@@ -27,6 +27,7 @@ typedef struct TabStruct
     void (*colorize)(TabStruct*);
 } TabStruct;
 
+
 TabStruct *createTabStruct(char *path, char *filename);
 void freeTabStruct(TabStruct *tabStruct);
 void clear_undo_redo(TabStruct* tabStruct);

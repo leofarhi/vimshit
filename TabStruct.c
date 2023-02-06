@@ -42,6 +42,40 @@ void SetColoration(TabStruct *tabStruct)
     }
 }
 
+
+static void on_draw (GtkDrawingArea *da, cairo_t *cr, gpointer user_data)
+{
+  GtkTextView *text_view = GTK_TEXT_VIEW (user_data);
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer (text_view);
+  GtkTextIter start_iter, end_iter;
+  gchar *line_number;
+  PangoLayout *layout;
+  gint line_count, i;
+
+  gtk_text_buffer_get_start_iter (buffer, &start_iter);
+  end_iter = start_iter;
+  line_count = gtk_text_iter_get_line (&end_iter);
+
+  gtk_text_iter_forward_to_line_end (&end_iter);
+
+  cairo_set_source_rgb (cr, 0.8, 0.8, 0.8);
+  cairo_paint (cr);
+
+  layout = gtk_widget_create_pango_layout (GTK_WIDGET (da), NULL);
+  pango_layout_set_font_description (layout, pango_font_description_from_string ("Monospace 10"));
+
+  for (i = 0; i < line_count; i++)
+    {
+      line_number = g_strdup_printf ("%d", i + 1);
+      pango_layout_set_text (layout, line_number, -1);
+      cairo_move_to (cr, 5, (i + 1) * 15);
+      pango_cairo_show_layout (cr, layout);
+      g_free (line_number);
+    }
+
+  g_object_unref (layout);
+}
+
 TabStruct *createTabStruct(char *path, char *filename)
 {
     GtkWidget *tab1, *textview, *scrollbar;
@@ -61,6 +95,17 @@ TabStruct *createTabStruct(char *path, char *filename)
     gtk_container_add(GTK_CONTAINER(scrollbar), textview);
 
     gtk_container_add(GTK_CONTAINER(tab1), scrollbar);
+
+    //add margin numbers of lines to the left of the textview
+    GtkWidget *line_numbers = gtk_drawing_area_new ();
+    gtk_widget_set_size_request (line_numbers, 50, -1);
+    gtk_widget_set_halign (line_numbers, GTK_ALIGN_START);
+    gtk_widget_set_valign (line_numbers, GTK_ALIGN_START);
+    gtk_widget_set_hexpand (line_numbers, FALSE);
+    gtk_widget_set_vexpand (line_numbers, TRUE);
+    gtk_container_add (GTK_CONTAINER (tab1), line_numbers);
+    g_signal_connect (line_numbers, "draw", G_CALLBACK (on_draw), textview);
+
 
     tabStruct->tab = tab1;
     tabStruct->textview = textview;
