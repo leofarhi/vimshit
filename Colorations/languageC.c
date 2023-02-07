@@ -72,11 +72,6 @@ list* AllWordsC(){
     c->regex_word = "(struct|union|enum)\\s+([a-zA-Z0-9_]+)";
     c->color = "lightgreen";
     list_add(l, c);
-    //color for : } <name>;
-    c = malloc(sizeof(Coloration));
-    c->regex_word = "\\}\\s+([a-zA-Z0-9_]+);";
-    c->color = "lightgreen";
-    list_add(l, c);
 
     //color for : <name>(
     c = malloc(sizeof(Coloration));
@@ -114,6 +109,31 @@ list* AllWordsC(){
     c->regex_word = "/\\*([^*]|\\*[^/])*\\*/";
     c->color = "green";
     list_add(l, c);
+
+    c = malloc(sizeof(Coloration));
+    c->regex_word = "(\\*|&|\\s+|\\.|->)*([a-zA-Z0-9_]+)";
+    c->color = "lightblue";
+    list_add(l, c);
+
+    /*//add regex for pointers, exclure les retours à la ligne
+    c = malloc(sizeof(Coloration));
+    //c->regex_word = "([a-zA-Z0-9_]+)(\\*|&|\\s+)([a-zA-Z0-9_])";
+    c->regex_word = "([a-zA-Z0-9_]+)(\\*|&|\\s+)\\b";
+    c->color = "lightgreen";
+    list_add(l, c);*/
+
+    //if <type> <name>(
+    c = malloc(sizeof(Coloration));
+    c->regex_word = "([a-zA-Z0-9_]+)(\\*|&|\\s+)*+([a-zA-Z0-9_]+)\\(";
+    c->color = "lightgreen";
+    list_add(l, c);
+
+    /*//if <type> *|& <name>
+    c = malloc(sizeof(Coloration));
+    c->regex_word = "([a-zA-Z0-9_]+)(\\*|&|\\s+)*";
+    c->color = "lightgreen";
+    list_add(l, c);*/
+    
     
     return l;
 
@@ -129,7 +149,8 @@ void setTagColorC(TabStruct *tabStruct)
     tag = gtk_text_buffer_create_tag(buffer, "lightblue", "foreground", "#60BEFE", NULL);
     tag = gtk_text_buffer_create_tag(buffer, "lightgreen", "foreground", "#4EC9B0", NULL);
     tag = gtk_text_buffer_create_tag(buffer, "yellow", "foreground", "#DCC471", NULL);
-    tag = gtk_text_buffer_create_tag(buffer, "blue", "foreground", "#337CD6", NULL);
+    tag = gtk_text_buffer_create_tag(buffer, "blue", "foreground", "#437CD6", NULL);
+
     tag = gtk_text_buffer_create_tag(buffer, "orange", "foreground", "#CE7B50", NULL);
     tag = gtk_text_buffer_create_tag(buffer, "pink", "foreground", "#CE70CA", NULL);
     tag = gtk_text_buffer_create_tag(buffer, "green", "foreground", "#6A9951", NULL);
@@ -179,6 +200,22 @@ void colorizeC(TabStruct *tabStruct){
             pos += ed;
         }
         regfree(&regex);
+    }
+
+    //if ->, . *, & change color to blue => remove blue tag and add default tag
+    char * special_char[] = {"->", ".", "*", "&", "(", ")", "[", "]", "{", "}", ",", ";", ":", "!", "?", "+", "-", "/", "=", "<", ">", "|", "^", "~", " "};
+    for(int i = 0; i < 4; i++){
+        char *pos = text;
+        while ((pos = strstr(pos, special_char[i])) != NULL)
+        {
+            gtk_text_buffer_get_iter_at_offset(buffer, &start, pos - text);
+            gtk_text_buffer_get_iter_at_offset(buffer, &end, pos - text + strlen(special_char[i]));
+            gtk_text_buffer_remove_tag_by_name(buffer, "blue", &start, &end);
+            gtk_text_buffer_remove_tag_by_name(buffer, "lightblue", &start, &end);
+            gtk_text_buffer_remove_tag_by_name(buffer, "lightgreen", &start, &end);
+            //gtk_text_buffer_apply_tag_by_name(buffer, "default", &start, &end);
+            pos += strlen(special_char[i]);
+        }
     }
 }
 

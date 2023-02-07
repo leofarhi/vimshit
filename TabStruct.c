@@ -42,38 +42,25 @@ void SetColoration(TabStruct *tabStruct)
     }
 }
 
-
-static void on_draw (GtkDrawingArea *da, cairo_t *cr, gpointer user_data)
-{
-  GtkTextView *text_view = GTK_TEXT_VIEW (user_data);
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer (text_view);
-  GtkTextIter start_iter, end_iter;
-  gchar *line_number;
-  PangoLayout *layout;
-  gint line_count, i;
-
-  gtk_text_buffer_get_start_iter (buffer, &start_iter);
-  end_iter = start_iter;
-  line_count = gtk_text_iter_get_line (&end_iter);
-
-  gtk_text_iter_forward_to_line_end (&end_iter);
-
-  cairo_set_source_rgb (cr, 0.8, 0.8, 0.8);
-  cairo_paint (cr);
-
-  layout = gtk_widget_create_pango_layout (GTK_WIDGET (da), NULL);
-  pango_layout_set_font_description (layout, pango_font_description_from_string ("Monospace 10"));
-
-  for (i = 0; i < line_count; i++)
+void update_line_number(GtkTextBuffer *buffer, GtkLabel *line_number) {
+    int line_count = gtk_text_buffer_get_line_count(buffer);
+    //set the text of the label a number of line followed by a new line and the same number
+    /*gchar *text = g_strdup_printf("%d\n%d", line_count, line_count);
+    gtk_label_set_text(line_number, text);
+    g_free(text);*/
+    //mettre 1 puis 2 puis 3 dans gchar *text et le realloc a chaque fois
+    gchar *text = (gchar*)malloc(1);
+    text[0] = '\0';
+    for (int i = 1; i <= line_count; i++)
     {
-      line_number = g_strdup_printf ("%d", i + 1);
-      pango_layout_set_text (layout, line_number, -1);
-      cairo_move_to (cr, 5, (i + 1) * 15);
-      pango_cairo_show_layout (cr, layout);
-      g_free (line_number);
+        char *tmp = (char*)malloc(10);
+        sprintf(tmp, "%d\n", i);
+        text = (gchar*)realloc(text, strlen(text) + strlen(tmp) + 1);
+        strcat(text, tmp);
+        free(tmp);
     }
-
-  g_object_unref (layout);
+    gtk_label_set_text(line_number, text);
+    free(text);
 }
 
 TabStruct *createTabStruct(char *path, char *filename)
@@ -85,7 +72,7 @@ TabStruct *createTabStruct(char *path, char *filename)
     tab1 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(notebook), tab1);
 
-    textview = gtk_text_view_new();
+    /*textview = gtk_text_view_new();
     gtk_widget_set_hexpand(textview, TRUE);
     gtk_widget_set_vexpand(textview, TRUE);
     //gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textview), GTK_WRAP_WORD);
@@ -94,18 +81,46 @@ TabStruct *createTabStruct(char *path, char *filename)
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrollbar), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_container_add(GTK_CONTAINER(scrollbar), textview);
 
+    gtk_container_add(GTK_CONTAINER(tab1), scrollbar);*/
+
+    GtkWidget *grid = gtk_grid_new();
+    gtk_widget_set_hexpand(grid, TRUE);
+    gtk_widget_set_vexpand(grid, TRUE);
+
+    GtkTextBuffer *buffer = gtk_text_buffer_new(NULL);
+    textview = gtk_text_view_new_with_buffer(buffer);
+    gtk_widget_set_hexpand(textview, TRUE);
+    gtk_widget_set_vexpand(textview, TRUE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textview), GTK_WRAP_NONE);
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(textview), TRUE);
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(textview), TRUE);
+    g_object_set(textview, "margin", 10, NULL);  // Set the margin
+
+    GtkAdjustment *adj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(textview));
+
+    GtkWidget *line_number = gtk_label_new("1");
+    gtk_grid_attach(GTK_GRID(grid), line_number, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), textview, 1, 0, 1, 1);
+    //label on the top left corner
+    gtk_widget_set_halign(line_number, GTK_ALIGN_START);
+    gtk_widget_set_valign(line_number, GTK_ALIGN_START);
+    //set spacing vertically label with height of the textview
+    gtk_widget_set_margin_top(line_number, 10);
+    gtk_widget_set_margin_bottom(line_number, 10);
+    //set spacing horizontally label with width of the textview
+    gtk_widget_set_margin_start(line_number, 10);
+    gtk_widget_set_margin_end(line_number, 10);
+
+
+    g_signal_connect(adj, "value-changed", G_CALLBACK(update_line_number), line_number);
+
+    scrollbar = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrollbar), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_container_add(GTK_CONTAINER(scrollbar), grid);
     gtk_container_add(GTK_CONTAINER(tab1), scrollbar);
 
-    //add margin numbers of lines to the left of the textview
-    GtkWidget *line_numbers = gtk_drawing_area_new ();
-    gtk_widget_set_size_request (line_numbers, 50, -1);
-    gtk_widget_set_halign (line_numbers, GTK_ALIGN_START);
-    gtk_widget_set_valign (line_numbers, GTK_ALIGN_START);
-    gtk_widget_set_hexpand (line_numbers, FALSE);
-    gtk_widget_set_vexpand (line_numbers, TRUE);
-    gtk_container_add (GTK_CONTAINER (tab1), line_numbers);
-    g_signal_connect (line_numbers, "draw", G_CALLBACK (on_draw), textview);
-
+    g_signal_connect(buffer, "changed", G_CALLBACK(update_line_number), line_number);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     tabStruct->tab = tab1;
     tabStruct->textview = textview;
@@ -118,6 +133,11 @@ TabStruct *createTabStruct(char *path, char *filename)
     PangoFontDescription *font_desc = pango_font_description_new();
     pango_font_description_set_size(font_desc, 12 * PANGO_SCALE);
     gtk_widget_override_font(textview, font_desc);
+    //set line number font at same size
+    gtk_widget_override_font(line_number, font_desc);
+    pango_font_description_free(font_desc);
+    //center le texte de line_number
+    gtk_label_set_justify(GTK_LABEL(line_number), GTK_JUSTIFY_CENTER);
     
     list_add(tabList,tabStruct);
 
@@ -388,6 +408,16 @@ void addNewLine(TabStruct *tabStruct)
     }
 }
 
+char* get_text(TabStruct *tabStruct)
+{
+    //get text of textview
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tabStruct->textview));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_start_iter(buffer, &start);
+    gtk_text_buffer_get_end_iter(buffer, &end);
+    char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    return text;
+}
 
 
 gboolean key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
